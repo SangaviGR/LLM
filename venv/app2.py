@@ -3,6 +3,11 @@ import fitz  # PyMuPDF for PDF parsing
 import google.generativeai as genai
 from dotenv import load_dotenv
 import streamlit as st
+from langchain_google_genai import ChatGoogleGenerativeAI
+
+
+# Initialize the ChatGoogleGenerativeAI model
+llm = ChatGoogleGenerativeAI(model="gemini-pro")
 
 # Load environment variables
 load_dotenv()
@@ -61,8 +66,16 @@ def generate_response_from_pdf(user_prompt, document_text, synonyms):
         
         # Generate the response
         response = model.generate_content(full_prompt)
+        result=llm.invoke( f"Document: {document_text}\n\n"
+            f"User Query: {user_prompt}\n"
+            f"Synonyms or alternative phrasings for the query: {synonyms_text}\n\n"
+            f"Instructions: Provide an answer that directly references the content of the document. "
+            f"If the answer is not explicitly found in the document, state that the information is unavailable in the source material. "
+            f"Ensure all responses are factually grounded in the document and avoid generating unverifiable or unrelated information."
+       )
         response_text = response.text.strip()
-        
+
+        response_text =result.content.strip()
         # Verify that the response references the source document
         if not any(phrase in document_text for phrase in response_text.split()):
             return (
