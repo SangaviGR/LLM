@@ -10,16 +10,52 @@ from typing import Any, Optional, Type
 from langchain_core.callbacks import (
     CallbackManagerForToolRun,
 )
-from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.tools import BaseTool, ToolException
+from pydantic import BaseModel, Field
 
 
 class ExecPythonInput(BaseModel):
     code: str = Field(description="the Python code to execute")
 
 
-class ExecPython(BaseTool):
-    """A tool implementation to execute Python via Riza's Code Interpreter API."""
+class ExecPython(BaseTool):  # type: ignore[override, override]
+    """Riza Code tool.
+
+    Setup:
+        Install ``langchain-community`` and ``rizaio`` and set environment variable ``RIZA_API_KEY``.
+
+        .. code-block:: bash
+
+            pip install -U langchain-community rizaio
+            export RIZA_API_KEY="your-api-key"
+
+    Instantiation:
+        .. code-block:: python
+
+            from langchain_community.tools.riza.command import ExecPython
+
+            tool = ExecPython()
+
+    Invocation with args:
+        .. code-block:: python
+
+            tool.invoke("x = 5; print(x)")
+
+        .. code-block:: python
+
+            '5\\n'
+
+    Invocation with ToolCall:
+
+        .. code-block:: python
+
+            tool.invoke({"args": {"code":"x = 5; print(x)"}, "id": "1", "name": tool.name, "type": "tool_call"})
+
+        .. code-block:: python
+
+            tool.invoke({"args": {"code":"x = 5; print(x)"}, "id": "1", "name": tool.name, "type": "tool_call"})
+
+    """  # noqa: E501
 
     name: str = "riza_exec_python"
     description: str = """Execute Python code to solve problems.
@@ -58,7 +94,7 @@ class ExecJavaScriptInput(BaseModel):
     code: str = Field(description="the JavaScript code to execute")
 
 
-class ExecJavaScript(BaseTool):
+class ExecJavaScript(BaseTool):  # type: ignore[override, override]
     """A tool implementation to execute JavaScript via Riza's Code Interpreter API."""
 
     name: str = "riza_exec_javascript"

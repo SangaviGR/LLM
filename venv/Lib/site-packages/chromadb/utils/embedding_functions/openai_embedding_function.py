@@ -17,6 +17,7 @@ class OpenAIEmbeddingFunction(EmbeddingFunction[Documents]):
         api_version: Optional[str] = None,
         deployment_id: Optional[str] = None,
         default_headers: Optional[Mapping[str, str]] = None,
+        dimensions: Optional[int] = None,
     ):
         """
         Initialize the OpenAIEmbeddingFunction.
@@ -37,6 +38,9 @@ class OpenAIEmbeddingFunction(EmbeddingFunction[Documents]):
                 point to a different deployment, such as an Azure deployment.
             deployment_id (str, optional): Deployment ID for Azure OpenAI.
             default_headers (Mapping, optional): A mapping of default headers to be sent with each API request.
+            dimensions (int, optional): The number of dimensions for the embeddings.
+                Only supported for `text-embedding-3` or later models from OpenAI.
+                https://platform.openai.com/docs/api-reference/embeddings/create#embeddings-create-dimensions
 
         """
         try:
@@ -46,10 +50,9 @@ class OpenAIEmbeddingFunction(EmbeddingFunction[Documents]):
                 "The openai python package is not installed. Please install it with `pip install openai`"
             )
 
-        if api_key is not None:
-            openai.api_key = api_key
+        self._api_key = api_key or openai.api_key
         # If the api key is still not set, raise an error
-        elif openai.api_key is None:
+        if self._api_key is None:
             raise ValueError(
                 "Please provide an OpenAI API key. You can get one at https://platform.openai.com/account/api-keys"
             )
@@ -84,6 +87,7 @@ class OpenAIEmbeddingFunction(EmbeddingFunction[Documents]):
             self._client = openai.Embedding
         self._model_name = model_name
         self._deployment_id = deployment_id
+        self._dimensions = dimensions or openai.NOT_GIVEN
 
     def __call__(self, input: Documents) -> Embeddings:
         """
@@ -107,7 +111,9 @@ class OpenAIEmbeddingFunction(EmbeddingFunction[Documents]):
         # Call the OpenAI Embedding API
         if self._v1:
             embeddings = self._client.create(
-                input=input, model=self._deployment_id or self._model_name
+                input=input,
+                model=self._deployment_id or self._model_name,
+                dimensions=self._dimensions,
             ).data
 
             # Sort resulting embeddings by index

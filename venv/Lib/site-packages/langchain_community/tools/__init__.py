@@ -22,11 +22,15 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from langchain_core.tools import (
-        BaseTool,
-        StructuredTool,
-        Tool,
-        tool,
+        BaseTool as BaseTool,
     )
+    from langchain_core.tools import (
+        StructuredTool as StructuredTool,
+    )
+    from langchain_core.tools import (
+        Tool as Tool,
+    )
+    from langchain_core.tools.convert import tool as tool
 
     from langchain_community.tools.ainetwork.app import (
         AINAppOps,
@@ -136,6 +140,9 @@ if TYPE_CHECKING:
         GmailSearch,
         GmailSendMessage,
     )
+    from langchain_community.tools.google_books import (
+        GoogleBooksQueryRun,
+    )
     from langchain_community.tools.google_cloud.texttospeech import (
         GoogleCloudTextToSpeechTool,
     )
@@ -162,6 +169,7 @@ if TYPE_CHECKING:
     from langchain_community.tools.interaction.tool import (
         StdInInquireTool,
     )
+    from langchain_community.tools.jina_search.tool import JinaSearch
     from langchain_community.tools.jira.tool import (
         JiraAction,
     )
@@ -294,6 +302,7 @@ if TYPE_CHECKING:
         ListSQLDatabaseTool,
         QuerySQLCheckerTool,
         QuerySQLDataBaseTool,
+        QuerySQLDatabaseTool,
     )
     from langchain_community.tools.stackexchange.tool import (
         StackExchangeTool,
@@ -338,6 +347,10 @@ if TYPE_CHECKING:
     )
 
 __all__ = [
+    "BaseTool",
+    "Tool",
+    "tool",
+    "StructuredTool",
     "AINAppOps",
     "AINOwnerOps",
     "AINRuleOps",
@@ -362,7 +375,6 @@ __all__ = [
     "BaseRequestsTool",
     "BaseSQLDatabaseTool",
     "BaseSparkSQLTool",
-    "BaseTool",
     "BearlyInterpreterTool",
     "BingSearchResults",
     "BingSearchRun",
@@ -399,6 +411,7 @@ __all__ = [
     "GmailGetThread",
     "GmailSearch",
     "GmailSendMessage",
+    "GoogleBooksQueryRun",
     "GoogleCloudTextToSpeechTool",
     "GooglePlacesTool",
     "GoogleSearchResults",
@@ -412,6 +425,7 @@ __all__ = [
     "InfoSQLDatabaseTool",
     "InfoSparkSQLTool",
     "JiraAction",
+    "JinaSearch",
     "JsonGetValueTool",
     "JsonListKeysTool",
     "ListDirectoryTool",
@@ -440,7 +454,8 @@ __all__ = [
     "QueryCheckerTool",
     "QueryPowerBITool",
     "QuerySQLCheckerTool",
-    "QuerySQLDataBaseTool",
+    "QuerySQLDatabaseTool",
+    "QuerySQLDataBaseTool",  # Legacy, kept for backwards compatibility.
     "QuerySparkSQLTool",
     "ReadFileTool",
     "RedditSearchRun",
@@ -465,10 +480,8 @@ __all__ = [
     "StdInInquireTool",
     "SteamWebAPIQueryRun",
     "SteamshipImageGenerationTool",
-    "StructuredTool",
     "TavilyAnswer",
     "TavilySearchResults",
-    "Tool",
     "VectorStoreQATool",
     "VectorStoreQAWithSourcesTool",
     "WikipediaQueryRun",
@@ -484,7 +497,6 @@ __all__ = [
     "ZenGuardTool",
     "authenticate",
     "format_tool_to_openai_function",
-    "tool",
 ]
 
 # Used for internal purposes
@@ -553,6 +565,7 @@ _module_lookup = {
     "GmailGetThread": "langchain_community.tools.gmail",
     "GmailSearch": "langchain_community.tools.gmail",
     "GmailSendMessage": "langchain_community.tools.gmail",
+    "GoogleBooksQueryRun": "langchain_community.tools.google_books",
     "GoogleCloudTextToSpeechTool": "langchain_community.tools.google_cloud.texttospeech",  # noqa: E501
     "GooglePlacesTool": "langchain_community.tools.google_places.tool",
     "GoogleSearchResults": "langchain_community.tools.google_search.tool",
@@ -566,6 +579,7 @@ _module_lookup = {
     "InfoSQLDatabaseTool": "langchain_community.tools.sql_database.tool",
     "InfoSparkSQLTool": "langchain_community.tools.spark_sql.tool",
     "JiraAction": "langchain_community.tools.jira.tool",
+    "JinaSearch": "langchain_community.tools.jina_search.tool",
     "JsonGetValueTool": "langchain_community.tools.json.tool",
     "JsonListKeysTool": "langchain_community.tools.json.tool",
     "ListDirectoryTool": "langchain_community.tools.file_management",
@@ -594,6 +608,8 @@ _module_lookup = {
     "QueryCheckerTool": "langchain_community.tools.spark_sql.tool",
     "QueryPowerBITool": "langchain_community.tools.powerbi.tool",
     "QuerySQLCheckerTool": "langchain_community.tools.sql_database.tool",
+    "QuerySQLDatabaseTool": "langchain_community.tools.sql_database.tool",
+    # Legacy, kept for backwards compatibility.
     "QuerySQLDataBaseTool": "langchain_community.tools.sql_database.tool",
     "QuerySparkSQLTool": "langchain_community.tools.spark_sql.tool",
     "ReadFileTool": "langchain_community.tools.file_management",

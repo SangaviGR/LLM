@@ -77,6 +77,7 @@ from langchain_community.utilities.dalle_image_generator import DallEAPIWrapper
 from langchain_community.utilities.dataforseo_api_search import DataForSeoAPIWrapper
 from langchain_community.utilities.duckduckgo_search import DuckDuckGoSearchAPIWrapper
 from langchain_community.utilities.golden_query import GoldenQueryAPIWrapper
+from langchain_community.utilities.google_books import GoogleBooksAPIWrapper
 from langchain_community.utilities.google_finance import GoogleFinanceAPIWrapper
 from langchain_community.utilities.google_jobs import GoogleJobsAPIWrapper
 from langchain_community.utilities.google_lens import GoogleLensAPIWrapper
@@ -101,8 +102,7 @@ from langchain_community.utilities.wolfram_alpha import WolframAlphaAPIWrapper
 from langchain_core.callbacks import BaseCallbackManager
 from langchain_core.callbacks import Callbacks
 from langchain_core.language_models import BaseLanguageModel
-from langchain_core.tools import BaseTool
-from langchain_core.tools import Tool
+from langchain_core.tools import BaseTool, Tool
 
 
 def _get_tools_requests_get() -> BaseTool:
@@ -334,6 +334,12 @@ def _get_pubmed(**kwargs: Any) -> BaseTool:
     return PubmedQueryRun(api_wrapper=PubMedAPIWrapper(**kwargs))
 
 
+def _get_google_books(**kwargs: Any) -> BaseTool:
+    from langchain_community.tools.google_books import GoogleBooksQueryRun
+
+    return GoogleBooksQueryRun(api_wrapper=GoogleBooksAPIWrapper(**kwargs))
+
+
 def _get_google_jobs(**kwargs: Any) -> BaseTool:
     return GoogleJobsQueryRun(api_wrapper=GoogleJobsAPIWrapper(**kwargs))
 
@@ -491,6 +497,7 @@ _EXTRA_OPTIONAL_TOOLS: Dict[str, Tuple[Callable[[KwArg(Any)], BaseTool], List[st
     "bing-search": (_get_bing_search, ["bing_subscription_key", "bing_search_url"]),
     "metaphor-search": (_get_metaphor_search, ["metaphor_api_key"]),
     "ddg-search": (_get_ddg_search, []),
+    "google-books": (_get_google_books, ["google_books_api_key"]),
     "google-lens": (_get_google_lens, ["serp_api_key"]),
     "google-serper": (_get_google_serper, ["serper_api_key", "aiosession"]),
     "google-scholar": (

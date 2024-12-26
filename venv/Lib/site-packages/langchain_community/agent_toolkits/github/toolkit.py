@@ -2,10 +2,10 @@
 
 from typing import Dict, List
 
-from langchain_core.pydantic_v1 import BaseModel, Field
-from langchain_core.tools import BaseToolkit
+from langchain_core.tools import BaseTool
+from langchain_core.tools.base import BaseToolkit
+from pydantic import BaseModel, Field
 
-from langchain_community.tools import BaseTool
 from langchain_community.tools.github.prompt import (
     COMMENT_ON_ISSUE_PROMPT,
     CREATE_BRANCH_PROMPT,
@@ -166,7 +166,7 @@ class GitHubToolkit(BaseToolkit):
 
     Setup:
         See detailed installation instructions here:
-        https://python.langchain.com/v0.2/docs/integrations/tools/github/#installation
+        https://python.langchain.com/docs/integrations/tools/github/#installation
 
         You will need to install ``pygithub`` and set the following environment
         variables:

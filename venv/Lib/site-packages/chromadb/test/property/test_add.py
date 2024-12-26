@@ -1,8 +1,8 @@
-import random
 import uuid
 from random import randint
 from typing import cast, List, Any, Dict
 import hypothesis
+import numpy as np
 import pytest
 import hypothesis.strategies as st
 from hypothesis import given, settings
@@ -99,13 +99,20 @@ def _test_add(
         metadata=collection.metadata,  # type: ignore
         embedding_function=collection.embedding_function,
     )
-    initial_version = coll.get_model()["version"]
+    initial_version = cast(int, coll.get_model()["version"])
 
     normalized_record_set = invariants.wrap_all(record_set)
 
     # TODO: The type of add() is incorrect as it does not allow for metadatas
     # like [{"a": 1}, None, {"a": 3}]
-    coll.add(**record_set)  # type: ignore
+    for batch in create_batches(
+        api=client,
+        ids=cast(List[str], record_set["ids"]),
+        embeddings=cast(Embeddings, record_set["embeddings"]),
+        metadatas=cast(Metadatas, record_set["metadatas"]),
+        documents=cast(List[str], record_set["documents"]),
+    ):
+        coll.add(*batch)
     # Only wait for compaction if the size of the collection is
     # some minimal size
     if (
@@ -169,9 +176,8 @@ def test_add_large(
     reset(client)
 
     record_set = create_large_recordset(
-        min_size=client.get_max_batch_size(),
-        max_size=client.get_max_batch_size()
-        + int(client.get_max_batch_size() * random.random()),
+        min_size=10000,
+        max_size=50000,
     )
     coll = client.create_collection(
         name=collection.name,
@@ -179,7 +185,7 @@ def test_add_large(
         embedding_function=collection.embedding_function,
     )
     normalized_record_set = invariants.wrap_all(record_set)
-    initial_version = coll.get_model()["version"]
+    initial_version = cast(int, coll.get_model()["version"])
 
     for batch in create_batches(
         api=client,
@@ -213,7 +219,7 @@ def test_add_large_exceeding(
     record_set = create_large_recordset(
         min_size=client.get_max_batch_size(),
         max_size=client.get_max_batch_size()
-        + int(client.get_max_batch_size() * random.random()),
+        + 100,  # Exceed the max batch size by 100 records
     )
     coll = client.create_collection(
         name=collection.name,
@@ -264,7 +270,7 @@ def test_out_of_order_ids(client: ClientAPI) -> None:
     coll = client.create_collection(
         "test", embedding_function=lambda input: [[1, 2, 3] for _ in input]  # type: ignore
     )
-    embeddings: Embeddings = [[1, 2, 3] for _ in ooo_ids]
+    embeddings: Embeddings = [np.array([1, 2, 3]) for _ in ooo_ids]
     coll.add(ids=ooo_ids, embeddings=embeddings)
     get_ids = coll.get(ids=ooo_ids)["ids"]
     assert get_ids == ooo_ids
@@ -278,8 +284,11 @@ def test_add_partial(client: ClientAPI) -> None:
     # TODO: We need to clean up the api types to support this typing
     coll.add(
         ids=["1", "2", "3"],
+        # All embeddings must be provided, or else None - no partial lists allowed
         embeddings=[[1, 2, 3], [1, 2, 3], [1, 2, 3]],  # type: ignore
+        # Metadatas can always be partial
         metadatas=[{"a": 1}, None, {"a": 3}],  # type: ignore
+        # Documents are optional if embeddings are provided
         documents=["a", "b", None],  # type: ignore
     )
 

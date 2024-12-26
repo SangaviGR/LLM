@@ -206,10 +206,10 @@ def _get_question(messages: List[BaseMessage]) -> HumanMessage:
 
 @deprecated(
     since="0.0.12",
-    removal="0.3.0",
+    removal="1.0",
     alternative_import="langchain_google_vertexai.ChatVertexAI",
 )
-class ChatVertexAI(_VertexAICommon, BaseChatModel):
+class ChatVertexAI(_VertexAICommon, BaseChatModel):  # type: ignore[override]
     """`Vertex AI` Chat large language models API."""
 
     model_name: str = "chat-bison"

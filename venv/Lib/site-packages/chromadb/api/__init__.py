@@ -27,6 +27,7 @@ from chromadb.api.types import (
     GetResult,
     WhereDocument,
 )
+from chromadb.auth import UserIdentity
 from chromadb.config import Component, Settings
 from chromadb.types import Database, Tenant, Collection as CollectionModel
 import chromadb.utils.embedding_functions as ef
@@ -219,13 +220,13 @@ class BaseAPI(ABC):
         self,
         collection_id: UUID,
         ids: Optional[IDs] = None,
-        where: Optional[Where] = {},
+        where: Optional[Where] = None,
         sort: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
         page: Optional[int] = None,
         page_size: Optional[int] = None,
-        where_document: Optional[WhereDocument] = {},
+        where_document: Optional[WhereDocument] = None,
         include: Include = IncludeMetadataDocumentsEmbeddings,
     ) -> GetResult:
         """[Internal] Returns entries from a collection specified by UUID.
@@ -252,9 +253,9 @@ class BaseAPI(ABC):
         self,
         collection_id: UUID,
         ids: Optional[IDs],
-        where: Optional[Where] = {},
-        where_document: Optional[WhereDocument] = {},
-    ) -> IDs:
+        where: Optional[Where] = None,
+        where_document: Optional[WhereDocument] = None,
+    ) -> None:
         """[Internal] Deletes entries from a collection specified by UUID.
 
         Args:
@@ -274,8 +275,8 @@ class BaseAPI(ABC):
         collection_id: UUID,
         query_embeddings: Embeddings,
         n_results: int = 10,
-        where: Where = {},
-        where_document: WhereDocument = {},
+        where: Optional[Where] = None,
+        where_document: Optional[WhereDocument] = None,
         include: Include = IncludeMetadataDocumentsEmbeddingsDistances,
     ) -> QueryResult:
         """[Internal] Performs a nearest neighbors query on a collection specified by UUID.
@@ -326,6 +327,14 @@ class BaseAPI(ABC):
     @abstractmethod
     def get_max_batch_size(self) -> int:
         """Return the maximum number of records that can be created or mutated in a single call."""
+        pass
+
+    @abstractmethod
+    def get_user_identity(self) -> UserIdentity:
+        """Resolve the tenant and databases for the client. Returns the default
+        values if can't be resolved.
+
+        """
         pass
 
 
@@ -398,7 +407,6 @@ class ClientAPI(BaseAPI, ABC):
     def get_collection(
         self,
         name: str,
-        id: Optional[UUID] = None,
         embedding_function: Optional[
             EmbeddingFunction[Embeddable]
         ] = ef.DefaultEmbeddingFunction(),  # type: ignore
@@ -406,7 +414,6 @@ class ClientAPI(BaseAPI, ABC):
     ) -> Collection:
         """Get a collection with the given name.
         Args:
-            id: The UUID of the collection to get. Id and Name are simultaneously used for lookup if provided.
             name: The name of the collection to get
             embedding_function: Optional function to use to embed documents.
                                 Uses the default embedding function if not provided.
@@ -441,9 +448,9 @@ class ClientAPI(BaseAPI, ABC):
         Args:
             name: The name of the collection to get or create
             metadata: Optional metadata to associate with the collection. If
-            the collection alredy exists, the metadata will be updated if
-            provided and not None. If the collection does not exist, the
-            new collection will be created with the provided metadata.
+            the collection already exists, the metadata provided is ignored.
+            If the collection does not exist, the new collection will be created
+            with the provided metadata.
             embedding_function: Optional function to use to embed documents
             data_loader: Optional function to use to load records (documents, images, etc.)
 
@@ -568,7 +575,6 @@ class ServerAPI(BaseAPI, AdminAPI, Component):
     def get_collection(
         self,
         name: str,
-        id: Optional[UUID] = None,
         tenant: str = DEFAULT_TENANT,
         database: str = DEFAULT_DATABASE,
     ) -> CollectionModel:
@@ -590,6 +596,131 @@ class ServerAPI(BaseAPI, AdminAPI, Component):
     def delete_collection(
         self,
         name: str,
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> None:
+        pass
+
+    @abstractmethod
+    @override
+    def _modify(
+        self,
+        id: UUID,
+        new_name: Optional[str] = None,
+        new_metadata: Optional[CollectionMetadata] = None,
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> None:
+        pass
+
+    @abstractmethod
+    @override
+    def _count(
+        self,
+        collection_id: UUID,
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> int:
+        pass
+
+    @abstractmethod
+    @override
+    def _peek(
+        self,
+        collection_id: UUID,
+        n: int = 10,
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> GetResult:
+        pass
+
+    @abstractmethod
+    @override
+    def _get(
+        self,
+        collection_id: UUID,
+        ids: Optional[IDs] = None,
+        where: Optional[Where] = None,
+        sort: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+        page: Optional[int] = None,
+        page_size: Optional[int] = None,
+        where_document: Optional[WhereDocument] = None,
+        include: Include = ["metadatas", "documents"],  # type: ignore[list-item]
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> GetResult:
+        pass
+
+    @abstractmethod
+    @override
+    def _add(
+        self,
+        ids: IDs,
+        collection_id: UUID,
+        embeddings: Embeddings,
+        metadatas: Optional[Metadatas] = None,
+        documents: Optional[Documents] = None,
+        uris: Optional[URIs] = None,
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> bool:
+        pass
+
+    @abstractmethod
+    @override
+    def _update(
+        self,
+        collection_id: UUID,
+        ids: IDs,
+        embeddings: Optional[Embeddings] = None,
+        metadatas: Optional[Metadatas] = None,
+        documents: Optional[Documents] = None,
+        uris: Optional[URIs] = None,
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> bool:
+        pass
+
+    @abstractmethod
+    @override
+    def _upsert(
+        self,
+        collection_id: UUID,
+        ids: IDs,
+        embeddings: Embeddings,
+        metadatas: Optional[Metadatas] = None,
+        documents: Optional[Documents] = None,
+        uris: Optional[URIs] = None,
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> bool:
+        pass
+
+    @abstractmethod
+    @override
+    def _query(
+        self,
+        collection_id: UUID,
+        query_embeddings: Embeddings,
+        n_results: int = 10,
+        where: Optional[Where] = None,
+        where_document: Optional[WhereDocument] = None,
+        include: Include = ["metadatas", "documents", "distances"],  # type: ignore[list-item]
+        tenant: str = DEFAULT_TENANT,
+        database: str = DEFAULT_DATABASE,
+    ) -> QueryResult:
+        pass
+
+    @abstractmethod
+    @override
+    def _delete(
+        self,
+        collection_id: UUID,
+        ids: Optional[IDs] = None,
+        where: Optional[Where] = None,
+        where_document: Optional[WhereDocument] = None,
         tenant: str = DEFAULT_TENANT,
         database: str = DEFAULT_DATABASE,
     ) -> None:

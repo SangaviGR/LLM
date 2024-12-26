@@ -1,19 +1,26 @@
 import os
 import fitz  # PyMuPDF for PDF parsing
-import google.generativeai as genai
 from dotenv import load_dotenv
 import streamlit as st
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.document_loaders import PyPDFLoader
+from langchain.chains.question_answering import load_qa_chain
+from langchain.vectorstores import Chroma
+from langchain.prompts import PromptTemplate
+from langchain.chains import LLMChain
 
-
-# Initialize the ChatGoogleGenerativeAI model
+import google.generativeai as genai
+# Initialize Google Generative AI model
 llm = ChatGoogleGenerativeAI(model="gemini-pro")
+embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
 
 # Load environment variables
 load_dotenv()
 
-# Configure Google Generative AI (Gemini)
-genai.configure(api_key=os.getenv('GOOGLE_API_KEY'))
+# Configure Streamlit
+st.set_page_config(page_title="Document-Based Chatbot", page_icon=":robot:", layout="wide")
 
 # Initialize Generative Model
 model = genai.GenerativeModel('gemini-pro')
@@ -21,7 +28,7 @@ model = genai.GenerativeModel('gemini-pro')
 # Function to extract text from PDF
 def extract_pdf_text(uploaded_file):
     try:
-        # Open the uploaded file directly from Streamlit's in-memory file
+        # Open the PDF using fitz
         doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         text = ""
         for page in doc:
@@ -30,7 +37,8 @@ def extract_pdf_text(uploaded_file):
     except Exception as e:
         return f"Error extracting text from PDF: {e}"
 
-# Function to generate synonyms or alternative phrasings for the user query
+
+# Function to generate synonyms or alternative phrasings
 def generate_synonyms(user_prompt, previous_query=None):
     try:
         # Construct the prompt for synonym generation
@@ -50,77 +58,80 @@ def generate_synonyms(user_prompt, previous_query=None):
         st.error(f"An error occurred while generating synonyms: {e}")
         return []
 
-# Function to generate response using Gemini based on the PDF content and synonyms
+
+# Function to generate response based on the document and query
 def generate_response_from_pdf(user_prompt, document_text, synonyms):
     try:
         # Include synonyms in the prompt
         synonyms_text = ", ".join(synonyms) if synonyms else "No synonyms generated"
-        full_prompt = (
-            f"Document: {document_text}\n\n"
-            f"User Query: {user_prompt}\n"
-            f"Synonyms or alternative phrasings for the query: {synonyms_text}\n\n"
-            f"Instructions: Provide an answer that directly references the content of the document. "
-            f"If the answer is not explicitly found in the document, state that the information is unavailable in the source material. "
-            f"Ensure all responses are factually grounded in the document and avoid generating unverifiable or unrelated information."
-        )
-        
-        # Generate the response
-        response = model.generate_content(full_prompt)
-        result=llm.invoke( f"Document: {document_text}\n\n"
-            f"User Query: {user_prompt}\n"
-            f"Synonyms or alternative phrasings for the query: {synonyms_text}\n\n"
-            f"Instructions: Provide an answer that directly references the content of the document. "
-            f"If the answer is not explicitly found in the document, state that the information is unavailable in the source material. "
-            f"Ensure all responses are factually grounded in the document and avoid generating unverifiable or unrelated information."
-       )
-        response_text = response.text.strip()
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        text_chunks = text_splitter.split_text(document_text)
 
-        response_text =result.content.strip()
-        # Verify that the response references the source document
-        if not any(phrase in document_text for phrase in response_text.split()):
-            return (
-                "The exact answer isn't available in the document. "
-                "Please refer to the document's content for verification."
-            )
-        
-        return response_text
+        # Create Chroma vector store
+        vector_store = Chroma.from_texts(text_chunks, embeddings)
+
+        # Retrieve relevant documents
+        retriever = vector_store.as_retriever()
+        docs = retriever.get_relevant_documents(user_prompt)
+
+        # Prepare QA Chain
+        context_from_docs = "\n".join([doc.page_content for doc in docs])
+        qa_prompt = PromptTemplate(
+            template="{context}\n\n{question}",
+            input_variables=["context", "question"],
+        )
+        qa_chain = LLMChain(llm=llm, prompt=qa_prompt)
+
+        # Generate the response
+        result = qa_chain.run(context=context_from_docs, question=user_prompt)
+
+        # Validate the response
+        if not any(phrase in document_text for phrase in result.split()):
+            return "The exact answer isn't available in the document. Refer to the content for more details."
+
+        return result
     except Exception as e:
         return f"Error generating response: {e}"
 
-# Streamlit interface to upload the PDF and interact with the chatbot
-def main():
-    st.set_page_config(page_title="Document-Based Chatbot", page_icon=":robot:", layout="wide")
 
+# Streamlit interface
+def main():
     st.title("Chatbot for Document Interaction")
 
     # Upload a PDF file
     uploaded_file = st.file_uploader("Upload your PDF document", type=["pdf"])
 
     if uploaded_file is not None:
-        # Extract text from PDF
+        # Extract text from the PDF
         pdf_text = extract_pdf_text(uploaded_file)
 
-        # Display the extracted text (first 1000 characters for brevity)
-        st.text_area("Extracted Text (Preview)", pdf_text[:1000], height=200)
+        # Check for errors in extraction
+        if "Error" in pdf_text:
+            st.error(pdf_text)
+        else:
+            # Display extracted text preview
+            st.text_area("Extracted Text (Preview)", pdf_text[:1000], height=200)
 
-        # Text area for user query
-        user_prompt = st.text_input("Ask a question related to the document:")
+            # Get user query
+            user_prompt = st.text_input("Ask a question related to the document:")
 
-        if user_prompt:
-            with st.spinner("Processing..."):
-                # Generate synonyms or alternative phrasings for the user prompt
-                synonyms = generate_synonyms(user_prompt)
+            if user_prompt:
+                with st.spinner("Processing..."):
+                    # Generate synonyms
+                    synonyms = generate_synonyms(user_prompt)
 
-                # Display the generated synonyms
-                st.markdown("### Generated Synonyms / Alternative Phrasings:")
-                st.write("\n".join(synonyms))
+                    # Display generated synonyms
+                    st.markdown("### Generated Synonyms / Alternative Phrasings:")
+                    st.write("\n".join(synonyms))
 
-                # Generate a response based on the user query and the document content
-                response = generate_response_from_pdf(user_prompt, pdf_text, synonyms)
+                    # Generate response based on query and document
+                    response = generate_response_from_pdf(user_prompt, pdf_text, synonyms)
 
-                # Display the response
-                st.markdown("### Response:")
-                st.write(response)
+                    # Display response
+                    st.markdown("### Response:")
+                    st.write(response)
 
+
+# Run the application
 if __name__ == "__main__":
     main()

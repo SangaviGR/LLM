@@ -21,18 +21,12 @@ import logging
 import random
 import re
 from chromadb.test.utils.wait_for_version_increase import wait_for_version_increase
+import numpy as np
 
 
 def _filter_where_clause(clause: Where, metadata: Optional[Metadata]) -> bool:
     """Return true if the where clause is true for the given metadata map"""
-    if metadata is None:
-        # None metadata does not match any clause
-        # Note: This includes cases where filtering for $ne or $nin
-        # as we require that the key is present in the metadata
-        # i.e for a record set of [{}, {}] and a filter of {"where": {"test": {"$ne": 1}}}
-        # the result should be [] as the key "test" is not present in the metadata
-        return False
-
+    metadata = metadata or dict()
     key, expr = list(clause.items())[0]
 
     # Handle the shorthand for equal: {key: val} where val is a simple value
@@ -52,40 +46,35 @@ def _filter_where_clause(clause: Where, metadata: Optional[Metadata]) -> bool:
     if key == "$or":
         assert isinstance(expr, list)
         return any(_filter_where_clause(clause, metadata) for clause in expr)
-    if key == "$in":
-        assert isinstance(expr, list)
-        return metadata[key] in expr if key in metadata else False  # type: ignore[comparison-overlap]
-    if key == "$nin":
-        assert isinstance(expr, list)
-        return metadata[key] not in expr  # type: ignore[comparison-overlap]
 
     # expr is an operator expression
     assert isinstance(expr, dict)
     op, val = list(expr.items())[0]
     assert isinstance(metadata, dict)
-    if key not in metadata:
-        return False
-    metadata_key = metadata[key]
     if op == "$eq":
-        return key in metadata and metadata_key == val
+        return key in metadata and metadata[key] == val
     elif op == "$ne":
-        return key in metadata and metadata_key != val
+        return key not in metadata or metadata[key] != val
     elif op == "$in":
-        return key in metadata and metadata_key in val  # type: ignore[operator]
+        return key in metadata and metadata[key] in val  # type: ignore[operator]
     elif op == "$nin":
-        return key in metadata and metadata_key not in val  # type: ignore[operator]
+        return key not in metadata or metadata[key] not in val  # type: ignore[operator]
 
     # The following conditions only make sense for numeric values
-    assert isinstance(metadata_key, int) or isinstance(metadata_key, float)
+    assert (
+        key not in metadata
+        or isinstance(metadata[key], int)
+        or isinstance(metadata[key], float)
+    )
     assert isinstance(val, int) or isinstance(val, float)
     if op == "$gt":
-        return (key in metadata) and (metadata_key > val)
+        return key in metadata and metadata[key] > val
     elif op == "$gte":
-        return key in metadata and metadata_key >= val
+        return key in metadata and metadata[key] >= val
     elif op == "$lt":
-        return key in metadata and metadata_key < val
+        return key in metadata and metadata[key] < val
     elif op == "$lte":
-        return key in metadata and metadata_key <= val
+        return key in metadata and metadata[key] <= val
     else:
         raise ValueError("Unknown operator: {}".format(key))
 
@@ -113,7 +102,7 @@ def _filter_where_doc_clause(clause: WhereDocument, doc: Document) -> bool:
         return expr in doc
     elif key == "$not_contains":
         if not doc:
-            return False
+            return True
         # SQLite FTS handles % and _ as word boundaries that are ignored so we need to
         # treat them as wildcards
         if "%" in expr or "_" in expr:
@@ -131,7 +120,9 @@ EMPTY_STRING: str = ""
 def _filter_embedding_set(
     record_set: strategies.RecordSet, filter: strategies.Filter
 ) -> IDs:
-    """Return IDs from the embedding set that match the given filter object"""
+    """Return IDs from the embedding set that match the given filter object
+    If none match, return an empty list
+    """
 
     normalized_record_set = invariants.wrap_all(record_set)
     ids = set(normalized_record_set["ids"])
@@ -215,7 +206,7 @@ def test_filterable_metadata_get(
         # some minimal size
         if should_compact and len(invariants.wrap(record_set["ids"])) > 10:
             # Wait for the model to be updated
-            wait_for_version_increase(client, collection.name, initial_version)
+            wait_for_version_increase(client, collection.name, initial_version)  # type: ignore
 
     for filter in filters:
         result_ids = coll.get(**filter)["ids"]
@@ -251,11 +242,6 @@ def test_filterable_metadata_get_limit_offset(
 ) -> None:
     caplog.set_level(logging.ERROR)
 
-    # The distributed system does not support limit/offset yet
-    # so we skip this test for now if the system is distributed
-    if not NOT_CLUSTER_ONLY:
-        pytest.skip("Distributed system does not support limit/offset yet")
-
     reset(client)
     coll = client.create_collection(
         name=collection.name,
@@ -272,7 +258,7 @@ def test_filterable_metadata_get_limit_offset(
         # some minimal size
         if should_compact and len(invariants.wrap(record_set["ids"])) > 10:
             # Wait for the model to be updated
-            wait_for_version_increase(client, collection.name, initial_version)
+            wait_for_version_increase(client, collection.name, initial_version)  # type: ignore
 
     for filter in filters:
         # add limit and offset to filter
@@ -280,7 +266,15 @@ def test_filterable_metadata_get_limit_offset(
         filter["offset"] = offset
         result_ids = coll.get(**filter)["ids"]
         expected_ids = _filter_embedding_set(record_set, filter)
-        assert sorted(result_ids) == sorted(expected_ids)[offset : offset + limit]
+        if len(expected_ids) > 0:
+            collection_ids = coll.get(ids=expected_ids)["ids"]
+            offset_id_order = {id: index for index, id in enumerate(collection_ids)}
+            assert (
+                result_ids
+                == sorted(expected_ids, key=lambda id: offset_id_order[id])[
+                    offset : offset + limit
+                ]
+            )
 
 
 @settings(
@@ -326,7 +320,7 @@ def test_filterable_metadata_query(
         # some minimal size
         if should_compact and len(invariants.wrap(record_set["ids"])) > 10:
             # Wait for the model to be updated
-            wait_for_version_increase(client, collection.name, initial_version)
+            wait_for_version_increase(client, collection.name, initial_version)  # type: ignore
 
     total_count = len(normalized_record_set["ids"])
     # Pick a random vector
@@ -366,8 +360,8 @@ def test_empty_filter(client: ClientAPI) -> None:
     coll = client.create_collection(name="test")
 
     test_ids: IDs = ["1", "2", "3"]
-    test_embeddings: Embeddings = [[1, 1], [2, 2], [3, 3]]
-    test_query_embedding: Embedding = [1, 2]
+    test_embeddings: Embeddings = [np.array([1, 1]), np.array([2, 2]), np.array([3, 3])]
+    test_query_embedding: Embedding = np.array([1, 2])
     test_query_embeddings: Embeddings = [test_query_embedding, test_query_embedding]
 
     coll.add(ids=test_ids, embeddings=test_embeddings)
@@ -379,7 +373,8 @@ def test_empty_filter(client: ClientAPI) -> None:
         include=["embeddings", "distances", "metadatas"],  # type: ignore[list-item]
     )
     assert res["ids"] == [[]]
-    assert res["embeddings"] == [[]]
+    if res["embeddings"] is not None:
+        assert cast(np.ndarray, res["embeddings"][0]).size == 0  # type: ignore
     assert res["distances"] == [[]]
     assert res["metadatas"] == [[]]
     assert set(res["included"]) == set(["embeddings", "distances", "metadatas"])
@@ -402,7 +397,7 @@ def test_boolean_metadata(client: ClientAPI) -> None:
     coll = client.create_collection(name="test")
 
     test_ids: IDs = ["1", "2", "3"]
-    test_embeddings: Embeddings = [[1, 1], [2, 2], [3, 3]]
+    test_embeddings: Embeddings = [np.array([1, 1]), np.array([2, 2]), np.array([3, 3])]
     test_metadatas: Metadatas = [{"test": True}, {"test": False}, {"test": True}]
 
     coll.add(ids=test_ids, embeddings=test_embeddings, metadatas=test_metadatas)
@@ -419,7 +414,7 @@ def test_get_empty(client: ClientAPI) -> None:
     coll = client.create_collection(name="test")
 
     test_ids: IDs = ["1", "2", "3"]
-    test_embeddings: Embeddings = [[1, 1], [2, 2], [3, 3]]
+    test_embeddings: Embeddings = [np.array([1, 1]), np.array([2, 2]), np.array([3, 3])]
     test_metadatas: Metadatas = [{"test": 10}, {"test": 20}, {"test": 30}]
 
     def check_empty_res(res: GetResult) -> None:

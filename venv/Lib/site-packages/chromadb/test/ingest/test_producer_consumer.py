@@ -16,6 +16,7 @@ from typing import (
     Sequence,
     Tuple,
 )
+from chromadb.errors import BatchSizeExceededError
 from chromadb.ingest import Producer, Consumer
 from chromadb.db.impl.sqlite import SqliteDB
 from chromadb.test.conftest import ProducerFn
@@ -28,6 +29,7 @@ from chromadb.types import (
 from chromadb.config import System, Settings
 from pytest import FixtureRequest, approx
 from asyncio import Event, wait_for, TimeoutError
+import numpy as np
 
 
 def sqlite() -> Generator[Tuple[Producer, Consumer], None, None]:
@@ -72,7 +74,7 @@ def producer_consumer(
 @pytest.fixture(scope="module")
 def sample_embeddings() -> Iterator[OperationRecord]:
     def create_record(i: int) -> OperationRecord:
-        vector = [i + i * 0.1, i + 1 + i * 0.1]
+        vector = np.array([i + i * 0.1, i + 1 + i * 0.1])
         metadata: Optional[Dict[str, Union[str, int, float]]]
         if i % 2 == 0:
             metadata = None
@@ -366,6 +368,6 @@ async def test_max_batch_size(
 
     embeddings = [next(sample_embeddings) for _ in range(max_batch_size + 1)]
     # Make sure that we can't produce a batch of size > max_batch_size
-    with pytest.raises(ValueError) as e:
+    with pytest.raises(BatchSizeExceededError) as e:
         producer.submit_embeddings(collection, embeddings=embeddings)
     assert "Cannot submit more than" in str(e.value)
